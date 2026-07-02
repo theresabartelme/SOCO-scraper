@@ -61,7 +61,7 @@ def get_president_info(session, club_id):
     # Find president (not vice president)
     president = None
     for officer in officers:
-        position = officer.get("position", "").lower()
+       position = (officer.get("position") or "").lower()
         if "president" in position and "vice" not in position:
             president = officer
             break
