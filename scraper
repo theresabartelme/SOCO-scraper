@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import csv
 import json
 import time
+import re
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 BASE_URL = "https://soco.college.harvard.edu"
@@ -25,12 +26,19 @@ def get_all_orgs(session):
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "lxml")
 
+    seen = set()
     orgs = []
-    for a in soup.select('a[href*="student_community?club_id="]'):
-        href = a["href"]
-        club_id = href.split("club_id=")[-1].split("&")[0]
+
+    # FIX: links now use ?a=1&club_id= format
+    for a in soup.select('a[href*="student_community?a=1&club_id="]'):
+        href = a.get("href", "")
+        match = re.search(r'club_id=(\d+)', href)
+        if not match:
+            continue
+        club_id = match.group(1)
         name = a.get_text(strip=True)
-        if club_id and name:
+        if club_id and name and club_id not in seen:
+            seen.add(club_id)
             orgs.append({"name": name, "club_id": club_id})
 
     print(f"Found {len(orgs)} organizations.")
@@ -57,19 +65,15 @@ def get_president_info(session, club_id):
                 if parent is None:
                     break
 
-                # Look for the name — typically in an <a> tag or nearby text node
                 mailto = parent.find("a", href=lambda h: h and h.startswith("mailto:"))
                 name_tag = parent.find("a", href=lambda h: h and "student_community" in h)
 
-                # Also try grabbing name from a heading or bold tag near the role
                 full_name = None
                 if name_tag:
                     full_name = name_tag.get_text(strip=True)
                 else:
-                    # Try sibling or parent text that looks like a name
                     for tag in parent.find_all(["a", "span", "div", "p", "h3", "h4"]):
                         text = tag.get_text(strip=True)
-                        # A name: 2+ words, no @ sign, not a role label
                         if (text and " " in text and "@" not in text
                                 and "president" not in text.lower()
                                 and len(text) < 60):
@@ -79,13 +83,11 @@ def get_president_info(session, club_id):
                 email = mailto["href"].replace("mailto:", "").strip() if mailto else None
 
                 if full_name or email:
-                    # Split name into first / last
                     first_name, last_name = "", ""
                     if full_name:
                         parts = full_name.strip().split()
                         first_name = parts[0] if parts else ""
                         last_name = parts[-1] if len(parts) > 1 else ""
-
                     return first_name, last_name, full_name or "", email
 
                 parent = parent.parent
