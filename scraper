@@ -28,8 +28,6 @@ def get_all_orgs(session):
 
     seen = set()
     orgs = []
-
-    # FIX: links now use ?a=1&club_id= format
     for a in soup.select('a[href*="student_community?a=1&club_id="]'):
         href = a.get("href", "")
         match = re.search(r'club_id=(\d+)', href)
@@ -57,40 +55,36 @@ def get_president_info(session, club_id):
 
     soup = BeautifulSoup(resp.text, "lxml")
 
-    for strong in soup.find_all("strong"):
+    # Each officer is a div.row containing:
+    #   - a <button class="btn btn-link"> with the name
+    #   - a <strong> with the role
+    #   - an <a href="mailto:..."> with the email
+    for row in soup.select("div.row"):
+        strong = row.find("strong")
+        if not strong:
+            continue
         role_text = strong.get_text(strip=True).lower()
-        if "president" in role_text and "vice" not in role_text:
-            parent = strong.parent
-            for _ in range(6):
-                if parent is None:
-                    break
 
-                mailto = parent.find("a", href=lambda h: h and h.startswith("mailto:"))
-                name_tag = parent.find("a", href=lambda h: h and "student_community" in h)
+        # Match president roles but not vice president
+        if "president" not in role_text or "vice" in role_text:
+            continue
 
-                full_name = None
-                if name_tag:
-                    full_name = name_tag.get_text(strip=True)
-                else:
-                    for tag in parent.find_all(["a", "span", "div", "p", "h3", "h4"]):
-                        text = tag.get_text(strip=True)
-                        if (text and " " in text and "@" not in text
-                                and "president" not in text.lower()
-                                and len(text) < 60):
-                            full_name = text
-                            break
+        # Get email from mailto link in this row
+        mailto = row.find("a", href=re.compile(r'^mailto:'))
+        email = mailto["href"].replace("mailto:", "").strip() if mailto else None
 
-                email = mailto["href"].replace("mailto:", "").strip() if mailto else None
+        # Get name from the btn-link button in this row
+        name_btn = row.find("button", class_=re.compile(r'btn-link'))
+        full_name = name_btn.get_text(strip=True) if name_btn else None
 
-                if full_name or email:
-                    first_name, last_name = "", ""
-                    if full_name:
-                        parts = full_name.strip().split()
-                        first_name = parts[0] if parts else ""
-                        last_name = parts[-1] if len(parts) > 1 else ""
-                    return first_name, last_name, full_name or "", email
+        # Split name
+        first_name, last_name = "", ""
+        if full_name:
+            parts = full_name.strip().split()
+            first_name = parts[0] if parts else ""
+            last_name = parts[-1] if len(parts) > 1 else ""
 
-                parent = parent.parent
+        return first_name, last_name, full_name or "", email
 
     return None, None, None, None
 
