@@ -1,0 +1,135 @@
+import requests
+from bs4 import BeautifulSoup
+import csv
+import json
+import time
+
+# ── Configuration ──────────────────────────────────────────────────────────────
+BASE_URL = "https://soco.college.harvard.edu"
+DELAY_SECONDS = 0.5
+
+COOKIE_HEADER = "_hjSessionUser_5278425=eyJpZCI6IjQxYjczMmFlLWI5OTAtNTUyZC1iZmE1LTVmMjlmOWQ4NmYyNCIsImNyZWF0ZWQiOjE3NjIzMTMwNzU3OTAsImV4aXN0aW5nIjp0cnVlfQ==; fpestid=xYSefFuiYOYiJFHWvu3CLajglsih9YH5d62XS6kxiAMP4x-Zpbqbh_Pc35Rz-k82QMZYTw; __gads=ID=cc3b435ed3fa81bd:T=1764975449:RT=1764975449:S=ALNI_MbJpIHcaJZsAoy-1MPyEUx1glvsEA; hjSessionUser3372373=eyJpZCI6ImU5NTRiYzZlLTM2NTgtNWE1NC05YzVkLTRkNmU4ZDBlMmNmNCIsImNyZWF0ZWQiOjE3NjkzNjIxNDE3NTIsImV4aXN0aW5nIjp0cnVlfQ==; hjSessionUser1721990=eyJpZCI6IjJhYTUwYjU5LTM4NDQtNWU2Zi1hYWNjLTMxNDdlYzJjZDUyMiIsImNyZWF0ZWQiOjE3Njk4OTYzMjk2MzQsImV4aXN0aW5nIjp0cnVlfQ==; twpid=tw.1774039468812.423244626697203528; cfclearance=ZX7ibPJlWWNwVNB7hTMnRYsYkC3QpMItbcEO0UBIpkQ-1774317914-1.2.1.1-ssEduZs4bqttIrYDnb7F0ZRBR9mAryFAGW7r.7jsIX3qtUc8rGjJ0DZut2K_zWobjB89VjB9AUcv24672JVE0wYuKl_QV9Pd5yExARf5sB2D125FkClY1IciWUqjzJw3KtukwpaeiVmVZKDA40mnafZeXzqtAOtlXPWsJvM37xzo9BQzdSEDLLgm.9Vs0UkfxuJatxs3xzpTiZsNUR.XDjm9WZGV_POK_G1DOpJdgYg; hjSessionUser5063577=eyJpZCI6Ijg2MWUyZjRmLWEzNDAtNTA3YS1iYTJlLWE3NTRkM2VlODg3ZCIsImNyZWF0ZWQiOjE3NzU4NjIwMzExMDMsImV4aXN0aW5nIjp0cnVlfQ==; hjSessionUser2241280=eyJpZCI6IjM3MTY3NDMxLTI5YTItNTJhMC1iODUzLWM4YzBkNWFkNGM1NyIsImNyZWF0ZWQiOjE3NzY1MzU5NTE0OTEsImV4aXN0aW5nIjpmYWxzZX0=; gaL1HHB6SM0G=GS2.1.s1778455491$o1$g0$t1778455496$j55$l0$h0; gaBP21J1JZTV=GS2.1.s1778455491$o1$g0$t1778455496$j55$l0$h0; ga09WNEKP5S9=GS2.1.s1780210539$o4$g0$t1780210564$j35$l0$h0; gaXWNEWZW3YK=GS2.1.s1780211126$o2$g0$t1780211135$j51$l0$h0; cebs=1; gaQ97GE6JKJ9=GS2.1.s1780336044$o2$g0$t1780336044$j60$l0$h0; gaFNNHYP076Y=GS2.1.s1780332792$o1$g1$t1780336044$j60$l0$h0; gaYMF3HK07M5=GS2.1.s1780336433$o1$g0$t1780336616$j60$l0$h0; ga1X5SHCCW1B=GS2.1.s1780374528$o1$g0$t1780374530$j58$l0$h0; gaEM6C86P601=GS2.2.s1780381403$o1$g0$t1780381403$j60$l0$h0; gaFF3MJFHZH5=GS2.1.s1780666397$o32$g1$t1780666541$j60$l0$h0; hubspotutk=5b3b7ce96d7402fb2075ad7b51644c2e; __hssrc=1; ga7Q50JX67KV=GS2.1.s1780937886$o1$g0$t1780937886$j60$l0$h2117569773; gaT15TZTPECN=GS2.2.s1781548292$o1$g0$t1781548292$j60$l0$h0; gaCB2RVQFCNR=GS2.1.s1781554107$o2$g0$t1781554107$j60$l0$h0; gaHH5LNDSC0P=GS2.1.s1781643736$o13$g1$t1781643765$j31$l0$h0; gaVLFX8Y9S4F=GS2.1.s1781643736$o11$g1$t1781643765$j31$l0$h0; gaREG2399202=GS2.1.s1781936035$o1$g1$t1781936242$j57$l0$h0; gaXBP2115NM8=GS2.1.s1781935388$o3$g1$t1781936330$j60$l0$h0; convr=s%3Awww.google.com*m%3Aorganic*t%3A*c%3A; scid=Ferbr01EazHr7XY4Db58z9llyRYUE6fyKaJAA; CEFT=Q%3D%3D%3D; OptanonAlertBoxClosed=2026-06-22T16:22:55.866Z; visidincap_881684=5ki7ZlCcSnaT5GjV7q4PrTBHO2oAAAAAQUIPAAAAAABD2LY8Bb2oGFWfxiiz5XB4; nlbi_881684=FSWoHidjGECKYtzilJ3XuAAAAAAs1EG26IKXrHDemzykDFLL; incap_ses_5033_881684=+7IFaNInD0jcZt1AU8/YRTFHO2oAAAAAg3pgpU46gEDWCcwgAwiz/g==; nlbi_881684_2147483392=uxYmGw/imlTi12aslJ3XuAAAAAA8XO15CyNticwYwvepbZR9; ga0BL4ZQBM0W=GS2.1.s1782269746$o14$g0$t1782269750$j56$l0$h0; gaW2SR8DW607=GS2.1.s1782269750$o9$g0$t1782269750$j60$l0$h0; ga2PZD5XNYSL=GS2.1.s1782269750$o12$g0$t1782269750$j60$l0$h0; fbp=fb.1.1776137947625.666098241430583544.AQYAAQIB; ttcsidD4OULJJC77U1VUV91UKG=1782281921189::nrt_WHnGdNkoORjjJwWD.30.1782282060597.1; ga72NC9RC7VN=GS2.1.s1782281921$o31$g1$t1782285042$j60$l0$h1659467642; ga3CXC97RWEK=GS2.1.s1782393985$o54$g0$t1782393985$j60$l0$h0; gaY6GHSCVTCT=GS2.1.s1782410085$o1$g0$t1782410089$j56$l0$h0; ga6S7711N1RR=GS2.1.s1782420653$o6$g0$t1782420653$j60$l0$h0; gaVVGL3HNQB3=GS2.1.s1782444388$o2$g0$t1782444388$j60$l0$h0; gaMN44P5KS85=GS2.1.s1782478141$o1$g1$t1782479257$j60$l0$h0; nmstat=f2a7defe-c417-bbee-53f9-39863226e460; gaECX5BHYZT7=GS2.1.s1782500668$o48$g0$t1782500668$j60$l0$h0; gaWF7T5MH29J=GS2.1.s1782507471$o7$g0$t1782507488$j43$l0$h0; ga8ZXH335QTV=GS2.1.s1782528520$o5$g1$t1782530676$j59$l0$h0; ga1MSJRLKMVP=GS2.1.s1782528520$o61$g1$t1782530676$j59$l0$h0; gaG3E4QR7DR9=GS2.2.s1782621653$o5$g0$t1782621653$j60$l0$h0; gaT6Y5WYSNG2=GS2.2.s1782621653$o5$g0$t1782621653$j60$l0$h0; gaYSMZ2MKYVV=GS2.1.s1782621653$o5$g0$t1782621660$j53$l0$h0; convv=vi%3A1*sc%3A4*cs%3A1782625294*fs%3A1782145366*pv%3A7*ps%3A1782279180; rdtuuid=1782625294577.8a2ca92b-9175-4428-af0b-4a0dcced8cf5; gaXPLDGPNPHJ=GS2.1.s1782640324$o2$g0$t1782640324$j60$l0$h0; gaZH44FE6MF7=GS2.1.s1782640324$o2$g0$t1782640324$j60$l0$h0; parselyvisitor={%22id%22:%22pid=f44d0e4f-72db-4e9e-8943-c813893adc9f%22%2C%22session_count%22:76%2C%22last_session_ts%22:1782647230676}; ga2MCEMGXSJF=GS2.1.s1782647230$o32$g0$t1782647236$j54$l0$h0; gaQ1D7CRPVC5=GS2.1.s1782651347$o1$g1$t1782651361$j46$l0$h0; gaY9XDQEYR1L=GS2.1.s1782651347$o1$g1$t1782651361$j46$l0$h0; ga5PYPC9RJJW=GS2.1.s1782651347$o1$g1$t1782651361$j46$l0$h0; gid=GA1.2.86734796.1782945732; ga_VJ4MQGT8FD=GS2.1.s1782961446$o1$g0$t1782961448$j58$l0$h0; gaG8T5V58QZQ=GS2.1.s1782961446$o1$g1$t1782961448$j58$l0$h0; gclau=1.1.834851076.1783017646; OptanonConsent=isIABGlobal=false&datestamp=Thu+Jul+02+2026+14%3A42%3A52+GMT-0400+(Eastern+Daylight+Time)&version=6.15.0&hosts=&consentId=dfa31ffa-177e-4642-b9dc-cbdf5e70be98&interactionCount=1&landingPath=NotLandingPage&groups=C0001%3A1%2CC0002%3A1%2CC0003%3A1%2CC0004%3A1%2CC0005%3A1&geolocation=US%3BMA&AwaitingReconsent=false; scidr=G-rbr01EazHr7XY4Db58z9l_lyRYUE6fyKaJBg; clck=lrk9zf%5E2%5Eg7e%5E0%5E2254; uetsid=d4e6e770764511f196754fe12c71edb1; uetvid=e98009d024e611f1bb548b5e96e3316a; tt_enable_cookie=1; ttp=01KWJ2856CKGYKJ5C0RYKF3S80.tt.1; __hstc=133161617.5b3b7ce96d7402fb2075ad7b51644c2e.1780937887169.1782961446955.1783017772384.7; ttcsid_C5KUG4T1T98720DVUHPG=1783017772237::5f2SLGV4lCSB5fa6ycdb.4.1783017772480.0; clsk=j2u4cp%5E1783017772538%5E1%5E1%5Er.clarity.ms%2Fcollect; ce.clock_data=-3%2C66.31.165.207%2C1%2C3cd8ef53850146e44b23f23260b6e24c%2CChrome%2CUS; cebsp_=9; ce.s=v~55b36b00ab336a34278b66075f5c18559ddaa809~vir~returning~lva~1783017772308~vpv~0~v11ls~d521d020-7645-11f1-bbb6-f5181ba8727e~v11.cs~392169~v11.s~d521d020-7645-11f1-bbb6-f5181ba8727e~v11.vs~55b36b00ab336a34278b66075f5c18559ddaa809~v11.sla~1783017772580~v11.ss~1783017772581~gtrk.la~mr3uqugw~lcw~1783017772736; sctr=1%7C1782964800000; ttcsid=1783017772238::rOY9Om0Mku6Zk7cbVNCK.33.1783017772480.0::1.-961.0::0.0.0.0::3443.18.0; gaN1Q4JMJ72W=GS2.1.s1783017772$o6$g0$t1783017776$j56$l0$h0; gaYM7YKPNYF7=GS2.1.s1783018419$o1$g0$t1783018429$j50$l0$h0; gaGMEVN96PYN=GS2.1.s1783018420$o3$g0$t1783018429$j51$l0$h0; aceLoggedIn=true,2894699115,c939e7376463473b8bd89c50fd6fe08d; ga=GA1.1.1284635460.1770665217; ga_NT51WMY1VP=GS2.1.s1783017646$o11$g0$t1783019981$j60$l0$h0; gaQEYJY07BXE=GS2.1.s1783019982$o162$g0$t1783019982$j60$l0$h0; gaX0DJ9359N3=GS2.1.s1783024938$o222$g0$t1783024938$j60$l0$h0; CG.SessionID=l5kqqsdvnqssv2hoygdgnmd4-rO4iFbJAv8oV%2bTePpHn%2bBQ%2fkIGg%3d; cg_uid=2404218-E7v7gq1p9FqdJWEIipP87Rk+E60WO52Kb1p2ZRD2mjQ=; AWSALB=pTmImslgwzqX5DC6DGyBZD4nipAx/mgAxmobZyS4pCD4PXWrUBcM/JQJJErJQJS/qd87c1CFjTsroemnyEA5LIwzqkPpDex4L9mRPIVGYHfACdfkdY2VFciMyyBI; AWSALBCORS=pTmImslgwzqX5DC6DGyBZD4nipAx/mgAxmobZyS4pCD4PXWrUBcM/JQJJErJQJS/qd87c1CFjTsroemnyEA5LIwzqkPpDex4L9mRPIVGYHfACdfkdY2VFciMyyBI"
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Cookie": COOKIE_HEADER,
+}
+
+# ── Step 1: Get all orgs ───────────────────────────────────────────────────────
+def get_all_orgs(session):
+    print("Fetching full org list...")
+    url = f"{BASE_URL}/club_signup?view=all&"
+    resp = session.get(url, headers=HEADERS)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "lxml")
+
+    orgs = []
+    for a in soup.select('a[href*="student_community?club_id="]'):
+        href = a["href"]
+        club_id = href.split("club_id=")[-1].split("&")[0]
+        name = a.get_text(strip=True)
+        if club_id and name:
+            orgs.append({"name": name, "club_id": club_id})
+
+    print(f"Found {len(orgs)} organizations.")
+    return orgs
+
+# ── Step 2: Get president info for one org ─────────────────────────────────────
+def get_president_info(session, club_id):
+    """Returns (first_name, last_name, full_name, email) or all None if not found."""
+    url = f"{BASE_URL}/feeds?type=club&type_id={club_id}&tab=officers"
+    try:
+        resp = session.get(url, headers=HEADERS)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        print(f"  ERROR fetching officers for club {club_id}: {e}")
+        return None, None, None, None
+
+    soup = BeautifulSoup(resp.text, "lxml")
+
+    for strong in soup.find_all("strong"):
+        role_text = strong.get_text(strip=True).lower()
+        if "president" in role_text and "vice" not in role_text:
+            parent = strong.parent
+            for _ in range(6):
+                if parent is None:
+                    break
+
+                # Look for the name — typically in an <a> tag or nearby text node
+                mailto = parent.find("a", href=lambda h: h and h.startswith("mailto:"))
+                name_tag = parent.find("a", href=lambda h: h and "student_community" in h)
+
+                # Also try grabbing name from a heading or bold tag near the role
+                full_name = None
+                if name_tag:
+                    full_name = name_tag.get_text(strip=True)
+                else:
+                    # Try sibling or parent text that looks like a name
+                    for tag in parent.find_all(["a", "span", "div", "p", "h3", "h4"]):
+                        text = tag.get_text(strip=True)
+                        # A name: 2+ words, no @ sign, not a role label
+                        if (text and " " in text and "@" not in text
+                                and "president" not in text.lower()
+                                and len(text) < 60):
+                            full_name = text
+                            break
+
+                email = mailto["href"].replace("mailto:", "").strip() if mailto else None
+
+                if full_name or email:
+                    # Split name into first / last
+                    first_name, last_name = "", ""
+                    if full_name:
+                        parts = full_name.strip().split()
+                        first_name = parts[0] if parts else ""
+                        last_name = parts[-1] if len(parts) > 1 else ""
+
+                    return first_name, last_name, full_name or "", email
+
+                parent = parent.parent
+
+    return None, None, None, None
+
+# ── Main ───────────────────────────────────────────────────────────────────────
+def main():
+    results = []
+
+    with requests.Session() as session:
+        orgs = get_all_orgs(session)
+
+        for i, org in enumerate(orgs, 1):
+            print(f"[{i}/{len(orgs)}] {org['name']} (id={org['club_id']})")
+            first, last, full, email = get_president_info(session, org["club_id"])
+            results.append({
+                "org_name":           org["name"],
+                "club_id":            org["club_id"],
+                "president_first":    first or "Not found",
+                "president_last":     last  or "Not found",
+                "president_fullname": full  or "Not found",
+                "president_email":    email or "Not found",
+            })
+            print(f"  → {full or 'No name'} | {email or 'No email'}")
+            time.sleep(DELAY_SECONDS)
+
+    # Save CSV
+    fieldnames = ["org_name", "club_id", "president_first", "president_last",
+                  "president_fullname", "president_email"]
+    with open("harvard_orgs_presidents.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(results)
+
+    # Save JSON
+    with open("harvard_orgs_presidents.json", "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+
+    found_email = sum(1 for r in results if r["president_email"] != "Not found")
+    found_name  = sum(1 for r in results if r["president_fullname"] != "Not found")
+    print(f"\nDone! {found_email}/{len(results)} orgs had a president email, "
+          f"{found_name}/{len(results)} had a president name.")
+    print("Saved to harvard_orgs_presidents.csv and harvard_orgs_presidents.json")
+
+if __name__ == "__main__":
+    main()
