@@ -46,7 +46,6 @@ def get_all_orgs(session):
 def get_president_info(session, club_id):
     """Returns (first_name, last_name, full_name, email) or all None if not found."""
 
-    # Call the internal JSON API — returns officers with firstName/lastName/id
     about_url = f"{BASE_URL}/mobile_ws/v18/mobile_club_about?id={club_id}"
     try:
         resp = session.get(about_url, headers=HEADERS)
@@ -58,10 +57,9 @@ def get_president_info(session, club_id):
 
     officers = data.get("club", {}).get("officers", [])
 
-    # Find president (not vice president)
     president = None
     for officer in officers:
-       position = (officer.get("position") or "").lower()
+        position = (officer.get("position") or "").lower()   # ← fixed line
         if "president" in position and "vice" not in position:
             president = officer
             break
@@ -75,7 +73,6 @@ def get_president_info(session, club_id):
     full_name = f"{first_name} {last_name}".strip()
     student_id = student.get("id")
 
-    # Get email from the ajax profile endpoint
     email = None
     if student_id:
         try:
@@ -89,7 +86,6 @@ def get_president_info(session, club_id):
             print(f"  ERROR fetching profile for student {student_id}: {e}")
 
     return first_name, last_name, full_name, email
-
 # ── Main ───────────────────────────────────────────────────────────────────────
 def main():
     results = []
