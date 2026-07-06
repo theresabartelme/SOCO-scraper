@@ -1,0 +1,157 @@
+import requests
+from bs4 import BeautifulSoup
+import csv
+import json
+import time
+import re
+
+# ── Configuration ──────────────────────────────────────────────────────────────
+BASE_URL = "https://soco.college.harvard.edu"
+DELAY_SECONDS = 0.5
+
+COOKIE_HEADER = "..."  # keep your existing cookie string here
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/html, /",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Cookie": COOKIE_HEADER,
+}
+
+# ── Step 1: Get all orgs ───────────────────────────────────────────────────────
+def get_all_orgs(session):
+    print("Fetching full org list...")
+    url = f"{BASE_URL}/club_signup?view=all&"
+    for attempt in range(1, 4):
+        try:
+            resp = session.get(url, headers=HEADERS, timeout=60)
+            resp.raise_for_status()
+            break
+        except Exception as e:
+            print(f"  Attempt {attempt} failed: {e}")
+            if attempt == 3:
+                raise
+            time.sleep(5)
+
+    soup = BeautifulSoup(resp.text, "lxml")
+    seen = set()
+    orgs = []
+    for a in soup.select('a[href*="student_community?a=1&club_id="]'):
+        href = a.get("href", "")
+        match = re.search(r'club_id=(\d+)', href)
+        if not match:
+            continue
+        club_id = match.group(1)
+        name = a.get_text(strip=True)
+        if club_id and name and club_id not in seen:
+            seen.add(club_id)
+            orgs.append({"name": name, "club_id": club_id})
+    print(f"Found {len(orgs)} organizations.")
+    return orgs
+
+
+# ── Step 2: Get president info via JSON API, with officer fallback ────────────
+def get_officer_contact_info(session, club_id):
+    """
+    Returns (first_name, last_name, full_name, email, contact_role) for the
+    president if one is found among the club's officers. If no president is
+    listed, falls back to the first officer that has a linked student profile.
+    Returns all None (except contact_role) if nothing usable is found.
+    """
+    about_url = f"{BASE_URL}/mobile_ws/v18/mobile_club_about?id={club_id}"
+    try:
+        resp = session.get(about_url, headers=HEADERS, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        print(f"  ERROR fetching about for club {club_id}: {e}")
+        return None, None, None, None, None
+
+    officers = data.get("club", {}).get("officers", [])
+    if not officers:
+        return None, None, None, None, None
+
+    selected = None
+    contact_role = None
+
+    # First pass: look specifically for a president
+    for officer in officers:
+        position = (officer.get("position") or "").lower()
+        if "president" in position and "vice" not in position:
+            selected = officer
+            contact_role = officer.get("position") or "President"
+            break
+
+    # Fallback: no president found, use any officer that has a student profile
+    if not selected:
+        for officer in officers:
+            student = officer.get("student", {}) or {}
+            if student.get("id"):
+                selected = officer
+                contact_role = officer.get("position") or "Officer (fallback)"
+                break
+
+    if not selected:
+        return None, None, None, None, None
+
+    student = selected.get("student", {}) or {}
+    first_name = student.get("firstName", "")
+    last_name = student.get("lastName", "")
+    full_name = f"{first_name} {last_name}".strip()
+    student_id = student.get("id")
+
+    email = None
+    if student_id:
+        try:
+            profile_url = f"{BASE_URL}/ajax_profile?ax=1&id={student_id}"
+            prof_resp = session.get(profile_url, headers=HEADERS, timeout=10)
+            prof_resp.raise_for_status()
+            match = re.search(r'mailto:([^"]+)', prof_resp.text)
+            if match:
+                email = match.group(1).strip()
+        except Exception as e:
+            print(f"  ERROR fetching profile for student {student_id}: {e}")
+
+    return first_name, last_name, full_name, email, contact_role
+
+
+# ── Main ───────────────────────────────────────────────────────────────────────
+def main():
+    results = []
+    with requests.Session() as session:
+        orgs = get_all_orgs(session)
+
+        for i, org in enumerate(orgs, 1):
+            print(f"[{i}/{len(orgs)}] {org['name']} (id={org['club_id']})")
+            first, last, full, email, role = get_officer_contact_info(session, org["club_id"])
+            results.append({
+                "org_name":           org["name"],
+                "club_id":            org["club_id"],
+                "contact_role":       role or "Not found",
+                "contact_first":      first or "Not found",
+                "contact_last":       last or "Not found",
+                "contact_fullname":   full or "Not found",
+                "contact_email":      email or "Not found",
+            })
+            print(f"  → [{role or 'N/A'}] {full or 'No name'} | {email or 'No email'}")
+            time.sleep(DELAY_SECONDS)
+
+    fieldnames = ["org_name", "club_id", "contact_role", "contact_first",
+                  "contact_last", "contact_fullname", "contact_email"]
+    with open("harvard_orgs_contacts.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(results)
+
+    with open("harvard_orgs_contacts.json", "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+
+    found_email = sum(1 for r in results if r["contact_email"] != "Not found")
+    found_name = sum(1 for r in results if r["contact_fullname"] != "Not found")
+    print(f"\nDone! {found_email}/{len(results)} orgs had a contact email, "
+          f"{found_name}/{len(results)} had a contact name.")
+    print("Saved to harvard_orgs_contacts.csv and harvard_orgs_contacts.json")
+
+
+if __name__ == "__main__":
+    main()
